@@ -146,7 +146,7 @@ Run against local seed listings with no external writes:
 rentrank-nyc \
   --seed-listings examples/seed_listings.json \
   --dry-run \
-  --output out/dry-run.json
+  --output cache/dry-run.json
 ```
 
 Run a live API dry-run without writing to Sheets:
@@ -157,7 +157,7 @@ rentrank-nyc \
   --use-gemini \
   --limit 25 \
   --rapidapi-max-requests 20 \
-  --listing-cache .cache/apartment_search/live_test_listings.json
+  --listing-cache cache/apartment_search/live_test_listings.json
 ```
 
 ## Production Run
@@ -169,7 +169,7 @@ rentrank-nyc \
   --use-gemini \
   --limit 50 \
   --rapidapi-max-requests 20 \
-  --listing-cache .cache/apartment_search/live_production_listings.json
+  --listing-cache cache/apartment_search/live_production_listings.json
 ```
 
 The request cap is enforced. If the RapidAPI cap is reached, the run stops gracefully and returns partial results instead of crashing.
@@ -261,6 +261,6 @@ Do not commit:
 - OAuth tokens
 - Google client secret JSON files
 - service account JSON files
-- `.cache/`
+- `cache/` and `.cache/`
 - local output files
 - private apartment preference documents

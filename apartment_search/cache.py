@@ -11,7 +11,7 @@ from apartment_search.models import LaundryStatus, Listing
 class ListingCache:
     """Persistent cache for enriched listing records already seen in prior runs."""
 
-    def __init__(self, path: str | Path = ".cache/apartment_search/listings.json") -> None:
+    def __init__(self, path: str | Path = "cache/apartment_search/listings.json") -> None:
         self.path = Path(path)
         self._data: dict[str, dict[str, Any]] | None = None
         self.hits = 0

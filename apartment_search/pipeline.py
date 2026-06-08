@@ -137,7 +137,7 @@ def build_pipeline(
     seed_listings_path: str | Path | None = None,
     use_gemini: bool = False,
     enable_hpd_lookup: bool = False,
-    listing_cache_path: str | Path = ".cache/apartment_search/listings.json",
+    listing_cache_path: str | Path = "cache/apartment_search/listings.json",
     rapidapi_max_requests: int | None = None,
 ) -> ApartmentSearchPipeline:
     profile = load_profile(profile_path)

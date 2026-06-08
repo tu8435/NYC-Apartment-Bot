@@ -4,8 +4,7 @@ nycapartmentsearch/
 __pycache__/
 .pytest_cache/
 .cache/
-out/
-out.txt
+cache/
 .env
 secrets/
 config/preferences.json

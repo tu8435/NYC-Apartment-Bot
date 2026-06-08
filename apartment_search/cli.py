@@ -27,7 +27,7 @@ def main() -> None:
     parser.add_argument("--use-gemini", action="store_true", help="Use Gemini scoring through Google's Gemini API when GEMINI_API_KEY is set.")
     parser.add_argument("--hpd-lookup", action="store_true", help="Check NYC Open Data for open HPD violations.")
     parser.add_argument("--limit", type=int, help="Maximum number of listings to process.")
-    parser.add_argument("--listing-cache", default=".cache/apartment_search/listings.json", help="Path to the persistent seen-listing cache.")
+    parser.add_argument("--listing-cache", default="cache/apartment_search/listings.json", help="Path to the persistent seen-listing cache.")
     parser.add_argument("--rapidapi-max-requests", type=int, help="Maximum RapidAPI requests allowed for this run.")
     parser.add_argument("--estimate-requests", type=int, help="Estimate request usage for this many listings and exit.")
     parser.add_argument("--cache-hit-rate", type=float, default=0.0, help="Expected seen-listing cache hit rate for request estimates, from 0 to 1.")

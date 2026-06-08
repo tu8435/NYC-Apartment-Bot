@@ -19,7 +19,7 @@ from apartment_search.models import CategoryScores, FilterResult, Listing, Listi
 
 
 class ScoreCache:
-    def __init__(self, path: str | Path = ".cache/apartment_search/model_scores.json") -> None:
+    def __init__(self, path: str | Path = "cache/apartment_search/model_scores.json") -> None:
         self.path = Path(path)
         self._data: dict[str, dict[str, Any]] | None = None
 
