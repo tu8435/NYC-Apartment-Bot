@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
 from sys import stderr
 from typing import Any
 
@@ -126,10 +128,11 @@ class GoogleSheetsConfig:
     spreadsheet_id: str | None = None
     folder_id: str | None = None
     spreadsheet_title: str = "RentRank NYC Candidates"
+    profile_name: str = "default"
+    workspace_path: str | None = None
     credentials_path: str | None = None
     oauth_client_secret_path: str | None = None
     oauth_token_path: str = "secrets/google-oauth-token.json"
-    create_spreadsheet_if_missing: bool = False
 
 
 class GoogleSheetsWriter:
@@ -143,8 +146,9 @@ class GoogleSheetsWriter:
         spreadsheet_id: str | None = None,
         folder_id: str | None = None,
         spreadsheet_title: str | None = None,
+        profile_name: str | None = None,
+        workspace_path: str | None = None,
         oauth_token_path: str | None = None,
-        create_spreadsheet_if_missing: bool = False,
         apply_target_env_overrides: bool = True,
     ) -> "GoogleSheetsWriter":
         env_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID") if apply_target_env_overrides else ""
@@ -162,10 +166,11 @@ class GoogleSheetsWriter:
                 spreadsheet_id=resolved_spreadsheet_id,
                 folder_id=resolved_folder_id,
                 spreadsheet_title=spreadsheet_title or env_title or "RentRank NYC Candidates",
+                profile_name=profile_name or "default",
+                workspace_path=workspace_path,
                 credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
                 oauth_client_secret_path=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
                 oauth_token_path=oauth_token_path or env_oauth_token or "secrets/google-oauth-token.json",
-                create_spreadsheet_if_missing=create_spreadsheet_if_missing,
             )
         )
 
@@ -181,18 +186,18 @@ class GoogleSheetsWriter:
         if dry_run:
             return {"dry_run": True, "workbook": workbook}
 
-        if not self.config.spreadsheet_id and not self.config.folder_id and not self.config.create_spreadsheet_if_missing:
-            raise RuntimeError(
-                "No Google Sheet target is configured. Set `google_sheets_spreadsheet_id` or "
-                "`google_drive_folder_link` in this profile's workspace.json, run with --dry-run, "
-                "or set `create_spreadsheet_if_missing` to true."
-            )
         sheets_service, drive_service = _build_google_services(
             credentials_path=self.config.credentials_path,
             oauth_client_secret_path=self.config.oauth_client_secret_path,
             oauth_token_path=self.config.oauth_token_path,
         )
+        if not self.config.spreadsheet_id and not self.config.folder_id:
+            self.config.folder_id = self._create_drive_folder(drive_service)
+            self._persist_workspace_target()
         spreadsheet_id = self.config.spreadsheet_id or self._create_spreadsheet(sheets_service, drive_service)
+        if spreadsheet_id != self.config.spreadsheet_id:
+            self.config.spreadsheet_id = spreadsheet_id
+            self._persist_workspace_target()
         self._ensure_tabs(sheets_service, spreadsheet_id, ACTIVE_TABS)
         _stage("Reading existing sheet state")
         existing = _read_existing_workbook(sheets_service, spreadsheet_id)
@@ -219,6 +224,19 @@ class GoogleSheetsWriter:
             "tabs": list(workbook),
         }
 
+    def _create_drive_folder(self, drive_service: Any) -> str:
+        folder_name = _drive_folder_name(self.config.profile_name)
+        folder = (
+            drive_service.files()
+            .create(
+                body={"name": folder_name, "mimeType": "application/vnd.google-apps.folder"},
+                fields="id",
+            )
+            .execute()
+        )
+        self._created_drive_folder_name = folder_name
+        return folder["id"]
+
     def _create_spreadsheet(self, sheets_service: Any, drive_service: Any) -> str:
         spreadsheet = (
             sheets_service.spreadsheets()
@@ -233,6 +251,36 @@ class GoogleSheetsWriter:
                 fields="id, parents",
             ).execute()
         return spreadsheet_id
+
+    def _persist_workspace_target(self) -> None:
+        if not self.config.workspace_path:
+            return
+        path = Path(self.config.workspace_path)
+        data: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    data = loaded
+            except json.JSONDecodeError:
+                data = {}
+
+        timestamp = datetime.now().replace(microsecond=0).isoformat()
+        data["profile_name"] = self.config.profile_name
+        data["google_sheets_title"] = self.config.spreadsheet_title
+        if self.config.folder_id:
+            data["google_drive_folder_id"] = self.config.folder_id
+            data["google_drive_folder_link"] = f"https://drive.google.com/drive/folders/{self.config.folder_id}"
+        if self.config.spreadsheet_id:
+            data["google_sheets_spreadsheet_id"] = self.config.spreadsheet_id
+            data["google_sheets_url"] = f"https://docs.google.com/spreadsheets/d/{self.config.spreadsheet_id}"
+        if hasattr(self, "_created_drive_folder_name"):
+            data["created_drive_folder_name"] = self._created_drive_folder_name
+        data.setdefault("created_at", timestamp)
+        data["updated_at"] = timestamp
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def _ensure_tabs(sheets_service: Any, spreadsheet_id: str, desired_tabs: list[str]) -> None:
@@ -842,46 +890,26 @@ def _build_google_services(
     oauth_client_secret_path: str | None = None,
     oauth_token_path: str = "secrets/google-oauth-token.json",
 ) -> tuple[Any, Any]:
-    from google.auth.transport.requests import Request
-    from google.oauth2 import service_account
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
+    from apartment_search.google_auth import SHEETS_DRIVE_SCOPES, build_google_services
 
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.file",
-    ]
-    credentials = None
-    service_account_path = _usable_path(credentials_path)
-    oauth_secret_path = _usable_path(oauth_client_secret_path) or _discover_oauth_client_secret()
-    if service_account_path:
-        credentials = service_account.Credentials.from_service_account_file(service_account_path, scopes=scopes)
-    elif oauth_secret_path:
-        from google_auth_oauthlib.flow import InstalledAppFlow
-
-        token_path = os.path.expanduser(oauth_token_path)
-        if os.path.exists(token_path):
-            credentials = Credentials.from_authorized_user_file(token_path, scopes=scopes)
-        if not credentials or not credentials.valid:
-            if credentials and credentials.expired and credentials.refresh_token:
-                credentials.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(oauth_secret_path, scopes)
-                oauth_port = int(os.getenv("GOOGLE_OAUTH_PORT", "8080"))
-                credentials = flow.run_local_server(port=oauth_port)
-            os.makedirs(os.path.dirname(token_path) or ".", exist_ok=True)
-            with open(token_path, "w", encoding="utf-8") as token_file:
-                token_file.write(credentials.to_json())
-    else:
-        raise RuntimeError(
-            "Set GOOGLE_APPLICATION_CREDENTIALS for a service account or "
-            "GOOGLE_OAUTH_CLIENT_SECRET for local OAuth Sheets access."
-        )
-    return build("sheets", "v4", credentials=credentials), build("drive", "v3", credentials=credentials)
+    sheets_service, drive_service = build_google_services(
+        credentials_path=credentials_path,
+        oauth_client_secret_path=oauth_client_secret_path,
+        oauth_token_path=oauth_token_path,
+        scopes=SHEETS_DRIVE_SCOPES,
+        services=(("sheets", "v4"), ("drive", "v3")),
+    )
+    return sheets_service, drive_service
 
 
 def _stage(message: str) -> None:
     print(f"[rentrank-nyc] {message}", file=stderr)
+
+
+def _drive_folder_name(profile_name: str) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H%M")
+    safe_name = profile_name.strip() or "default"
+    return f"RentRank Profile - {safe_name} - {timestamp}"
 
 
 def _usable_path(path: str | None) -> str | None:

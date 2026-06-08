@@ -17,8 +17,6 @@ class WorkspaceConfig:
     google_drive_folder_id: str = ""
     google_drive_folder_link: str = ""
     google_sheets_title: str = "RentRank NYC Candidates"
-    google_oauth_token_path: str = "secrets/google-oauth-token.json"
-    create_spreadsheet_if_missing: bool = False
 
 
 def load_workspace_config(path: str | Path | None = None, apply_env_overrides: bool = True) -> WorkspaceConfig:
@@ -35,9 +33,6 @@ def load_workspace_config(path: str | Path | None = None, apply_env_overrides: b
         google_drive_folder_link=str(merged.get("google_drive_folder_link", "")).strip(),
         google_sheets_title=str(merged.get("google_sheets_title", "RentRank NYC Candidates")).strip()
         or "RentRank NYC Candidates",
-        google_oauth_token_path=str(merged.get("google_oauth_token_path", "secrets/google-oauth-token.json")).strip()
-        or "secrets/google-oauth-token.json",
-        create_spreadsheet_if_missing=_as_bool(merged.get("create_spreadsheet_if_missing", False)),
     )
 
 
@@ -71,22 +66,8 @@ def _with_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         "google_sheets_spreadsheet_id": "GOOGLE_SHEETS_SPREADSHEET_ID",
         "google_drive_folder_id": "GOOGLE_DRIVE_FOLDER_ID",
         "google_sheets_title": "GOOGLE_SHEETS_TITLE",
-        "google_oauth_token_path": "GOOGLE_OAUTH_TOKEN",
-        "create_spreadsheet_if_missing": "RENTRANK_CREATE_SPREADSHEET_IF_MISSING",
     }
     for key, env_name in env_map.items():
         if value := (os.getenv(env_name) or "").strip():
-            merged[key] = _env_bool(value) if key == "create_spreadsheet_if_missing" else value
+            merged[key] = value
     return merged
-
-
-def _env_bool(value: str) -> bool:
-    return value.lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _as_bool(value: object) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return _env_bool(value)
-    return bool(value)

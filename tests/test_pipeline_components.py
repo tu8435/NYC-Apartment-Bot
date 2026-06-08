@@ -1,6 +1,9 @@
 import json
+import base64
 import ssl
 import urllib.error
+from email import message_from_bytes
+from email import policy
 
 import pytest
 
@@ -8,6 +11,7 @@ from apartment_search.cli import _safe_env_fingerprint
 from apartment_search.commute import CommuteEstimator, next_weekday_timestamp
 from apartment_search.diligence import application_doc_rows, tour_checklist_rows
 from apartment_search.filtering import classify_laundry, filter_listing
+from apartment_search.google_auth import get_google_credentials, profile_oauth_scopes
 from apartment_search.hpd import parse_nyc_address
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.outreach import build_outreach_draft
@@ -23,6 +27,7 @@ from apartment_search.sheets import GoogleSheetsConfig, GoogleSheetsWriter
 from apartment_search.sheets import CANDIDATE_HEADERS, REJECTED_HEADERS, TOUR_HEADERS, build_workbook_values, build_workflow_rows
 from apartment_search.sheets import parse_drive_folder_id, parse_spreadsheet_id
 from apartment_search.sheets import _usable_path
+from apartment_search.share import share_profile
 from apartment_search.workspace import load_workspace_config
 
 
@@ -85,6 +90,7 @@ def test_init_wizard_writes_private_profile_and_workspace(tmp_path) -> None:
     result = run_init_wizard(
         profile_path=profile_path,
         workspace_path=workspace_path,
+        connect_google=False,
         force=True,
         input_fn=lambda _: "",
         print_fn=lambda _: None,
@@ -107,6 +113,7 @@ def test_init_wizard_supports_up_to_eight_renters(tmp_path) -> None:
     run_init_wizard(
         profile_path=profile_path,
         workspace_path=workspace_path,
+        connect_google=False,
         force=True,
         input_fn=lambda _: next(responses),
         print_fn=lambda _: None,
@@ -156,6 +163,7 @@ def test_init_wizard_uses_boroughs_and_numbered_qualitative_choices(tmp_path) ->
     run_init_wizard(
         profile_path=profile_path,
         workspace_path=workspace_path,
+        connect_google=False,
         force=True,
         input_fn=lambda _: next(responses),
         print_fn=lambda _: None,
@@ -201,7 +209,7 @@ def test_workspace_config_can_ignore_env_for_explicit_profile_workspace(
 ) -> None:
     workspace_path = tmp_path / "workspace.json"
     workspace_path.write_text(
-        '{"google_sheets_spreadsheet_id": "", "google_oauth_token_path": "profile-token.json"}',
+        '{"google_sheets_spreadsheet_id": ""}',
         encoding="utf-8",
     )
     monkeypatch.setenv("GOOGLE_SHEETS_SPREADSHEET_ID", "root-sheet")
@@ -210,28 +218,28 @@ def test_workspace_config_can_ignore_env_for_explicit_profile_workspace(
     workspace = load_workspace_config(workspace_path, apply_env_overrides=False)
 
     assert workspace.google_sheets_spreadsheet_id == ""
-    assert workspace.google_oauth_token_path == "profile-token.json"
 
 
-def test_workspace_config_loads_profile_oauth_token_path(tmp_path) -> None:
+def test_sheets_writer_persists_created_workspace_targets(tmp_path) -> None:
     workspace_path = tmp_path / "workspace.json"
-    workspace_path.write_text(
-        '{"google_oauth_token_path": "secrets/config/profiles/search/google-oauth-token.json"}',
-        encoding="utf-8",
+    workspace_path.write_text('{"google_sheets_title": "Test Sheet"}', encoding="utf-8")
+    writer = GoogleSheetsWriter(
+        GoogleSheetsConfig(
+            spreadsheet_id="sheet-id",
+            folder_id="folder-id",
+            spreadsheet_title="Test Sheet",
+            profile_name="search",
+            workspace_path=str(workspace_path),
+        )
     )
 
-    workspace = load_workspace_config(workspace_path)
+    writer._created_drive_folder_name = "RentRank Profile - search - 2026-06-08 0130"
+    writer._persist_workspace_target()
 
-    assert workspace.google_oauth_token_path == "secrets/config/profiles/search/google-oauth-token.json"
-
-
-def test_workspace_config_loads_create_spreadsheet_guard(tmp_path) -> None:
-    workspace_path = tmp_path / "workspace.json"
-    workspace_path.write_text('{"create_spreadsheet_if_missing": true}', encoding="utf-8")
-
-    workspace = load_workspace_config(workspace_path)
-
-    assert workspace.create_spreadsheet_if_missing is True
+    data = json.loads(workspace_path.read_text(encoding="utf-8"))
+    assert data["profile_name"] == "search"
+    assert data["google_drive_folder_link"] == "https://drive.google.com/drive/folders/folder-id"
+    assert data["google_sheets_url"] == "https://docs.google.com/spreadsheets/d/sheet-id"
 
 
 def test_sheets_writer_parses_workspace_sheet_link() -> None:
@@ -255,11 +263,84 @@ def test_sheets_writer_can_disable_target_env_fallback(monkeypatch: pytest.Monke
     assert writer.config.oauth_token_path == "profile-token.json"
 
 
-def test_sheets_writer_requires_explicit_target_for_writes() -> None:
-    writer = GoogleSheetsWriter(GoogleSheetsConfig())
+def test_google_credentials_can_use_existing_token_without_client_secret(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token_path = tmp_path / "google-oauth-token.json"
+    scopes = profile_oauth_scopes()
+    token_path.write_text(
+        json.dumps(
+            {
+                "token": "access-token",
+                "refresh_token": "refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": scopes,
+                "expiry": "2999-01-01T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
+    monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(RuntimeError, match="No Google Sheet target"):
-        writer.write([], default_profile(), [], [], dry_run=False)
+    credentials = get_google_credentials(None, None, str(token_path), scopes=scopes)
+
+    assert credentials.token == "access-token"
+
+
+def test_share_profile_attaches_preferences_and_workspace_without_token_file(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    profile_dir = tmp_path / "secrets" / "config" / "profiles" / "search"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "preferences.json").write_text('{"renter_names": ["Trusted User"]}', encoding="utf-8")
+    (profile_dir / "workspace.json").write_text(
+        '{"google_sheets_title": "Shared Sheet", "trusted_private_note": "keep-me"}',
+        encoding="utf-8",
+    )
+    (profile_dir / "google-oauth-token.json").write_text('{"secret": true}', encoding="utf-8")
+    sent_messages: list[dict[str, str]] = []
+
+    class FakeSend:
+        def __init__(self, body):
+            self.body = body
+
+        def execute(self):
+            sent_messages.append(self.body)
+            return {"id": "message-id"}
+
+    class FakeMessages:
+        def send(self, userId, body):
+            return FakeSend(body)
+
+    class FakeUsers:
+        def messages(self):
+            return FakeMessages()
+
+    class FakeGmail:
+        def users(self):
+            return FakeUsers()
+
+    monkeypatch.setattr("apartment_search.share.build_google_services", lambda **_: (FakeGmail(),))
+
+    result = share_profile("search", "friend@example.com")
+
+    assert result["gmail_message_id"] == "message-id"
+    raw = base64.urlsafe_b64decode(sent_messages[0]["raw"])
+    message = message_from_bytes(raw, policy=policy.default)
+    filenames = {part.get_filename() for part in message.walk() if part.get_filename()}
+    attachment_text = "\n".join(
+        part.get_content() for part in message.walk() if part.get_filename() in {"preferences.json", "workspace.json"}
+    )
+    assert filenames == {"preferences.json", "workspace.json"}
+    assert "Trusted User" in attachment_text
+    assert "Shared Sheet" in attachment_text
+    assert "keep-me" in attachment_text
+    assert "secret" not in attachment_text
 
 
 def test_laundry_dealbreaker_rejects_laundromat_only() -> None:

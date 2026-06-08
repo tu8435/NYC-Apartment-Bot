@@ -12,6 +12,7 @@ from apartment_search.filtering import filter_listing
 from apartment_search.hpd import HpdViolationClient
 from apartment_search.models import LaundryStatus, Listing, PreferenceProfile, RankedListing
 from apartment_search.outreach import build_outreach_draft
+from apartment_search.profile_auth import oauth_token_path_for_profile
 from apartment_search.preferences import load_profile
 from apartment_search.providers import ListingProvider, RapidApiRealtyProvider, RapidApiRequestBudgetExceeded
 from apartment_search.scoring import ListingScorer
@@ -133,6 +134,7 @@ class SeedListingProvider(ListingProvider):
 def build_pipeline(
     profile_path: str | Path | None = None,
     workspace_path: str | Path | None = None,
+    profile_name: str | None = None,
     folder_link_path: str | Path | None = None,
     seed_listings_path: str | Path | None = None,
     use_gemini: bool = False,
@@ -157,8 +159,9 @@ def build_pipeline(
         spreadsheet_id=workspace.google_sheets_spreadsheet_id,
         folder_id=workspace.google_drive_folder_id,
         spreadsheet_title=workspace.google_sheets_title,
-        oauth_token_path=workspace.google_oauth_token_path,
-        create_spreadsheet_if_missing=workspace.create_spreadsheet_if_missing,
+        profile_name=profile_name,
+        workspace_path=str(workspace_path) if workspace_path else None,
+        oauth_token_path=str(oauth_token_path_for_profile(profile_name)) if profile_name else None,
         apply_target_env_overrides=workspace_path is None,
     )
     scorer = ListingScorer(profile, use_gemini=use_gemini)

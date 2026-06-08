@@ -120,6 +120,7 @@ def run_init_wizard(
     workspace_path: str | Path = "secrets/config/workspace.json",
     *,
     oauth_token_path: str | Path | None = None,
+    connect_google: bool | None = None,
     force: bool = False,
     input_fn: InputFn = input,
     print_fn: PrintFn = print,
@@ -129,8 +130,6 @@ def run_init_wizard(
 
     profile = _load_json(EXAMPLE_PROFILE_PATH)
     workspace = _load_json(EXAMPLE_WORKSPACE_PATH)
-    if oauth_token_path:
-        workspace["google_oauth_token_path"] = str(oauth_token_path)
 
     _prompt_profile(profile, input_fn, print_fn)
     _prompt_workspace(workspace, input_fn, print_fn)
@@ -139,6 +138,18 @@ def run_init_wizard(
     workspace_output = Path(workspace_path)
     _write_json(profile_output, profile, force, input_fn, print_fn)
     _write_json(workspace_output, workspace, force, input_fn, print_fn)
+
+    if oauth_token_path and _should_connect_google(connect_google, input_fn):
+        from apartment_search.google_auth import get_google_credentials, profile_oauth_scopes
+
+        print_fn("Opening Google OAuth flow for this profile...")
+        get_google_credentials(
+            credentials_path=None,
+            oauth_client_secret_path=None,
+            oauth_token_path=str(oauth_token_path),
+            scopes=profile_oauth_scopes(include_gmail=True),
+        )
+        print_fn(f"Wrote private Google OAuth token to {oauth_token_path}")
 
     print_fn(f"Wrote private preferences to {profile_output}")
     print_fn(f"Wrote private workspace config to {workspace_output}")
@@ -239,11 +250,6 @@ def _prompt_workspace(workspace: dict[str, Any], input_fn: InputFn, print_fn: Pr
     )
     workspace["google_drive_folder_id"] = ""
     workspace["google_sheets_title"] = _ask("Google Sheet title", workspace["google_sheets_title"], input_fn)
-    workspace["create_spreadsheet_if_missing"] = _ask_bool(
-        "Allow creating a new Sheet in My Drive if no Sheet or folder link is configured",
-        bool(workspace.get("create_spreadsheet_if_missing", False)),
-        input_fn,
-    )
 
 
 def _ask(prompt: str, default: Any, input_fn: InputFn) -> str:
@@ -373,6 +379,12 @@ def _write_json(path: Path, data: dict[str, Any], force: bool, input_fn: InputFn
             return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def _should_connect_google(connect_google: bool | None, input_fn: InputFn) -> bool:
+    if connect_google is not None:
+        return connect_google
+    return _ask_bool("Connect Google for this profile now", True, input_fn)
 
 
 def _load_json(path: Path) -> dict[str, Any]:

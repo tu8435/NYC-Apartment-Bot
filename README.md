@@ -111,6 +111,7 @@ Enable these Google APIs in the project tied to your keys:
 - Distance Matrix API
 - Google Sheets API
 - Google Drive API
+- Gmail API, if you want to use `rentrank-nyc share`
 
 For local OAuth Sheets access:
 
@@ -220,7 +221,11 @@ Then run with that profile:
 rentrank-nyc --profile-name summer-2026 --dry-run
 ```
 
-When a named profile is used, RentRank NYC also reads that profile's `workspace.json` and stores OAuth tokens at `secrets/config/profiles/<name>/google-oauth-token.json`.
+When a named profile is used, RentRank NYC also reads that profile's `workspace.json` and stores OAuth tokens at `secrets/config/profiles/<name>/google-oauth-token.json`. The wizard prompts you to connect Google during setup; you can also refresh or create that token later:
+
+```bash
+rentrank-nyc auth --profile-name summer-2026
+```
 
 You can also generate only a preference file at an explicit path:
 
@@ -244,10 +249,18 @@ When no private profile exists, RentRank NYC falls back to the sanitized example
 - `google_drive_folder_id`: create new Sheets inside a Drive folder.
 - `google_drive_folder_link`: paste a Drive folder URL instead of an ID.
 - `google_sheets_title`: title used when RentRank NYC creates a new Sheet.
-- `google_oauth_token_path`: OAuth token path for this workspace or named profile.
-- `create_spreadsheet_if_missing`: set to `true` only if you want RentRank NYC to create a Sheet in My Drive when no Sheet or folder target is configured.
 
-For the root/default workspace, environment variables like `GOOGLE_SHEETS_SPREADSHEET_ID` still work and override the workspace file. For named profiles, `--profile-name` uses that profile's own `workspace.json` and OAuth token path so it does not silently inherit the root workspace target.
+If a named profile has no Sheet or Drive folder target, RentRank NYC creates a Drive folder named `RentRank Profile - <profile-name> - <timestamp>`, creates a Sheet inside it, and persists the new IDs and links back into that profile's `workspace.json`.
+
+For the root/default workspace, environment variables like `GOOGLE_SHEETS_SPREADSHEET_ID` still work and override the workspace file. For named profiles, `--profile-name` uses that profile's own `workspace.json` and profile-local OAuth token so it does not silently inherit the root workspace target.
+
+To share a profile with a trusted roommate, email the exact `preferences.json` and `workspace.json` files:
+
+```bash
+rentrank-nyc share --profile-name summer-2026 --share-email friend@example.com
+```
+
+The OAuth token file is not attached. The recipient should save the two JSON files under their local profile folder and run `rentrank-nyc auth --profile-name summer-2026` to connect their own Google account.
 
 ## Tests
 

@@ -9,16 +9,18 @@ from pathlib import Path
 from apartment_search.commute import CommuteEstimator
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.pipeline import build_pipeline
+from apartment_search.profile_auth import authenticate_profile
 from apartment_search.preferences import profile_dir_for_name, profile_path_for_name, write_default_profile
 from apartment_search.request_budget import estimate_requests
 from apartment_search.scoring import GoogleGeminiScoringClient
+from apartment_search.share import share_profile
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the NYC apartment search automation pipeline.")
-    parser.add_argument("command", nargs="?", choices=["init"], help="Run an interactive setup command.")
+    parser.add_argument("command", nargs="?", choices=["init", "auth", "share"], help="Run a setup/auth/share command.")
     parser.add_argument("--profile", help="Path to a JSON preference profile file.")
-    parser.add_argument("--profile-name", help="Named profile under secrets/config/profiles/<name>.json.")
+    parser.add_argument("--profile-name", help="Named profile under secrets/config/profiles/<name>.")
     parser.add_argument("--workspace", help="Path to a JSON workspace config file.")
     parser.add_argument("--env-file", default=".env", help="Path to a dotenv-style environment file.")
     parser.add_argument("--seed-listings", help="Path to local listing JSON for dry runs or calibration.")
@@ -37,6 +39,8 @@ def main() -> None:
     parser.add_argument("--init-profile", help="Write the default preference profile JSON to this path and exit.")
     parser.add_argument("--profile-output", help="Path written by `init` for private preferences.")
     parser.add_argument("--workspace-output", default="secrets/config/workspace.json", help="Path written by `init` for private workspace config.")
+    parser.add_argument("--share-email", help="Target email for `share`.")
+    parser.add_argument("--skip-google-auth", action="store_true", help="Do not open Google OAuth during `init`.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing files when running `init`.")
     parser.add_argument("--output", help="Optional path for dry-run JSON output.")
     args = parser.parse_args()
@@ -44,6 +48,8 @@ def main() -> None:
 
     if args.profile and args.profile_name:
         parser.error("Use either --profile or --profile-name, not both.")
+    if args.command in {"auth", "share"} and not args.profile_name:
+        parser.error(f"`{args.command}` requires --profile-name.")
 
     if args.command == "init":
         try:
@@ -55,14 +61,33 @@ def main() -> None:
                 else profile_dir / "workspace.json"
             )
             oauth_token_path = profile_dir / "google-oauth-token.json" if profile_dir else None
-        except ValueError as error:
+        except (FileNotFoundError, ValueError) as error:
             parser.error(str(error))
         run_init_wizard(
             profile_path=profile_output,
             workspace_path=workspace_output,
             oauth_token_path=oauth_token_path,
+            connect_google=False if args.skip_google_auth else None,
             force=args.force,
         )
+        return
+
+    if args.command == "auth":
+        try:
+            token_path = authenticate_profile(args.profile_name)
+        except (FileNotFoundError, ValueError) as error:
+            parser.error(str(error))
+        print(f"Wrote Google OAuth token to {token_path}")
+        return
+
+    if args.command == "share":
+        if not args.share_email:
+            parser.error("`share` requires --share-email.")
+        try:
+            result = share_profile(args.profile_name, args.share_email)
+        except (FileNotFoundError, ValueError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, indent=2))
         return
 
     if args.init_profile:
@@ -103,6 +128,7 @@ def main() -> None:
     pipeline = build_pipeline(
         profile_path=profile_path,
         workspace_path=workspace_path,
+        profile_name=args.profile_name,
         folder_link_path=args.folder_link,
         seed_listings_path=args.seed_listings,
         use_gemini=args.use_gemini,
