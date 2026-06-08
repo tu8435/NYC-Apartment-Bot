@@ -1,0 +1,28 @@
+[project]
+name = "nyc-apartment-search"
+version = "0.1.0"
+description = "Spreadsheet-first NYC apartment search automation for StreetEasy-style listings."
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32.0",
+  "certifi>=2025.0.0",
+  "google-api-python-client>=2.170.0",
+  "google-auth>=2.40.0",
+  "google-auth-oauthlib>=1.2.0",
+  "tqdm>=4.67.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0"
+]
+
+[project.scripts]
+apartment-search = "apartment_search.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["apartment_search*"]

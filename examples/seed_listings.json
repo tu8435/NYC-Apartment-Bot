@@ -1,0 +1,47 @@
+{
+  "listings": [
+    {
+      "id": "sample-bright-soho",
+      "url": "https://streeteasy.com/building/sample/4a",
+      "address": "100 Sample Street",
+      "unit": "4A",
+      "neighborhood": "SoHo",
+      "borough": "Manhattan",
+      "rent": 5000,
+      "bedrooms": 2,
+      "bathrooms": 1.5,
+      "description": "Bright renovated two bedroom with oversized windows, dishwasher, counter space, in-unit washer/dryer, large living room for entertaining, and split bedrooms that can fit desks.",
+      "amenities": ["In-unit washer/dryer", "Dishwasher", "Elevator", "Package room"],
+      "image_urls": [
+        "https://example.com/1.jpg",
+        "https://example.com/2.jpg",
+        "https://example.com/3.jpg",
+        "https://example.com/4.jpg",
+        "https://example.com/5.jpg",
+        "https://example.com/6.jpg"
+      ],
+      "no_fee": true,
+      "commute_minutes": 12,
+      "subway_walk_minutes": 4,
+      "subway_transfers": 0
+    },
+    {
+      "id": "sample-dark-railroad",
+      "url": "https://streeteasy.com/building/sample/1b",
+      "address": "200 Sample Avenue",
+      "unit": "1B",
+      "neighborhood": "Bushwick",
+      "borough": "Brooklyn",
+      "rent": 4200,
+      "bedrooms": 2,
+      "bathrooms": 1,
+      "description": "Railroad style apartment with compact living room, nearby laundromat, and limited photos.",
+      "amenities": ["Nearby laundromat"],
+      "image_urls": ["https://example.com/1.jpg"],
+      "no_fee": null,
+      "commute_minutes": 28,
+      "subway_walk_minutes": 9,
+      "subway_transfers": 1
+    }
+  ]
+}
