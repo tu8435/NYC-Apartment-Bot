@@ -12,7 +12,7 @@ from apartment_search.hpd import parse_nyc_address
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.outreach import build_outreach_draft
 from apartment_search.pipeline import ApartmentSearchPipeline
-from apartment_search.preferences import profile_path_for_name
+from apartment_search.preferences import profile_dir_for_name, profile_path_for_name
 from apartment_search.providers.base import ListingProvider
 from apartment_search.providers.rapidapi_realty import RapidApiRealtyProvider, RapidApiRequestBudgetExceeded
 from apartment_search.request_budget import estimate_requests
@@ -172,7 +172,8 @@ def test_init_wizard_uses_boroughs_and_numbered_qualitative_choices(tmp_path) ->
 
 
 def test_named_profile_paths_live_under_private_profiles_dir() -> None:
-    assert profile_path_for_name("summer-2026").as_posix() == "secrets/config/profiles/summer-2026.json"
+    assert profile_dir_for_name("summer-2026").as_posix() == "secrets/config/profiles/summer-2026"
+    assert profile_path_for_name("summer-2026").as_posix() == "secrets/config/profiles/summer-2026/preferences.json"
 
 
 def test_named_profile_rejects_path_traversal() -> None:
@@ -192,6 +193,18 @@ def test_workspace_config_prefers_env_over_file(tmp_path, monkeypatch: pytest.Mo
 
     assert workspace.google_sheets_spreadsheet_id == "sheet-from-env"
     assert workspace.google_sheets_title == "File Title"
+
+
+def test_workspace_config_loads_profile_oauth_token_path(tmp_path) -> None:
+    workspace_path = tmp_path / "workspace.json"
+    workspace_path.write_text(
+        '{"google_oauth_token_path": "secrets/config/profiles/search/google-oauth-token.json"}',
+        encoding="utf-8",
+    )
+
+    workspace = load_workspace_config(workspace_path)
+
+    assert workspace.google_oauth_token_path == "secrets/config/profiles/search/google-oauth-token.json"
 
 
 def test_laundry_dealbreaker_rejects_laundromat_only() -> None:

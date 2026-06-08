@@ -2,5 +2,6 @@
   "google_sheets_spreadsheet_id": "",
   "google_drive_folder_id": "",
   "google_drive_folder_link": "",
-  "google_sheets_title": "RentRank NYC Candidates"
+  "google_sheets_title": "RentRank NYC Candidates",
+  "google_oauth_token_path": "secrets/google-oauth-token.json"
 }

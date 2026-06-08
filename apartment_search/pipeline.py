@@ -157,6 +157,7 @@ def build_pipeline(
         spreadsheet_id=workspace.google_sheets_spreadsheet_id,
         folder_id=workspace.google_drive_folder_id,
         spreadsheet_title=workspace.google_sheets_title,
+        oauth_token_path=workspace.google_oauth_token_path,
     )
     scorer = ListingScorer(profile, use_gemini=use_gemini)
     hpd_client = HpdViolationClient(enabled=enable_hpd_lookup)

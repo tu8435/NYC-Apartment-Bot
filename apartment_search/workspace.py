@@ -17,6 +17,7 @@ class WorkspaceConfig:
     google_drive_folder_id: str = ""
     google_drive_folder_link: str = ""
     google_sheets_title: str = "RentRank NYC Candidates"
+    google_oauth_token_path: str = "secrets/google-oauth-token.json"
 
 
 def load_workspace_config(path: str | Path | None = None) -> WorkspaceConfig:
@@ -32,6 +33,8 @@ def load_workspace_config(path: str | Path | None = None) -> WorkspaceConfig:
         google_drive_folder_link=str(merged.get("google_drive_folder_link", "")).strip(),
         google_sheets_title=str(merged.get("google_sheets_title", "RentRank NYC Candidates")).strip()
         or "RentRank NYC Candidates",
+        google_oauth_token_path=str(merged.get("google_oauth_token_path", "secrets/google-oauth-token.json")).strip()
+        or "secrets/google-oauth-token.json",
     )
 
 
@@ -65,6 +68,7 @@ def _with_env_overrides(data: dict[str, Any]) -> dict[str, Any]:
         "google_sheets_spreadsheet_id": "GOOGLE_SHEETS_SPREADSHEET_ID",
         "google_drive_folder_id": "GOOGLE_DRIVE_FOLDER_ID",
         "google_sheets_title": "GOOGLE_SHEETS_TITLE",
+        "google_oauth_token_path": "GOOGLE_OAUTH_TOKEN",
     }
     for key, env_name in env_map.items():
         if value := (os.getenv(env_name) or "").strip():

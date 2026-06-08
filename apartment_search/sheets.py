@@ -142,6 +142,7 @@ class GoogleSheetsWriter:
         spreadsheet_id: str | None = None,
         folder_id: str | None = None,
         spreadsheet_title: str | None = None,
+        oauth_token_path: str | None = None,
     ) -> "GoogleSheetsWriter":
         resolved_folder_id = (
             parse_drive_folder_id(folder_id or "")
@@ -156,7 +157,7 @@ class GoogleSheetsWriter:
                 spreadsheet_title=spreadsheet_title or os.getenv("GOOGLE_SHEETS_TITLE", "RentRank NYC Candidates"),
                 credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
                 oauth_client_secret_path=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-                oauth_token_path=os.getenv("GOOGLE_OAUTH_TOKEN", "secrets/google-oauth-token.json"),
+                oauth_token_path=oauth_token_path or os.getenv("GOOGLE_OAUTH_TOKEN", "secrets/google-oauth-token.json"),
             )
         )
 

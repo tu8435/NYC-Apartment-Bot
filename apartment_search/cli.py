@@ -9,7 +9,7 @@ from pathlib import Path
 from apartment_search.commute import CommuteEstimator
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.pipeline import build_pipeline
-from apartment_search.preferences import profile_path_for_name, write_default_profile
+from apartment_search.preferences import profile_dir_for_name, profile_path_for_name, write_default_profile
 from apartment_search.request_budget import estimate_requests
 from apartment_search.scoring import GoogleGeminiScoringClient
 
@@ -47,14 +47,20 @@ def main() -> None:
 
     if args.command == "init":
         try:
-            profile_output = args.profile_output or (
-                profile_path_for_name(args.profile_name) if args.profile_name else "secrets/config/preferences.json"
+            profile_dir = profile_dir_for_name(args.profile_name) if args.profile_name else None
+            profile_output = args.profile_output or (profile_dir / "preferences.json" if profile_dir else "secrets/config/preferences.json")
+            workspace_output = (
+                args.workspace_output
+                if args.workspace_output != "secrets/config/workspace.json" or not profile_dir
+                else profile_dir / "workspace.json"
             )
+            oauth_token_path = profile_dir / "google-oauth-token.json" if profile_dir else None
         except ValueError as error:
             parser.error(str(error))
         run_init_wizard(
             profile_path=profile_output,
-            workspace_path=args.workspace_output,
+            workspace_path=workspace_output,
+            oauth_token_path=oauth_token_path,
             force=args.force,
         )
         return
@@ -88,12 +94,15 @@ def main() -> None:
 
     try:
         profile_path = args.profile or (profile_path_for_name(args.profile_name) if args.profile_name else None)
+        workspace_path = args.workspace or (
+            profile_dir_for_name(args.profile_name) / "workspace.json" if args.profile_name else None
+        )
     except ValueError as error:
         parser.error(str(error))
 
     pipeline = build_pipeline(
         profile_path=profile_path,
-        workspace_path=args.workspace,
+        workspace_path=workspace_path,
         folder_link_path=args.folder_link,
         seed_listings_path=args.seed_listings,
         use_gemini=args.use_gemini,

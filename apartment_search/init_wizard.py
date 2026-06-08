@@ -119,6 +119,7 @@ def run_init_wizard(
     profile_path: str | Path = "secrets/config/preferences.json",
     workspace_path: str | Path = "secrets/config/workspace.json",
     *,
+    oauth_token_path: str | Path | None = None,
     force: bool = False,
     input_fn: InputFn = input,
     print_fn: PrintFn = print,
@@ -128,6 +129,8 @@ def run_init_wizard(
 
     profile = _load_json(EXAMPLE_PROFILE_PATH)
     workspace = _load_json(EXAMPLE_WORKSPACE_PATH)
+    if oauth_token_path:
+        workspace["google_oauth_token_path"] = str(oauth_token_path)
 
     _prompt_profile(profile, input_fn, print_fn)
     _prompt_workspace(workspace, input_fn, print_fn)

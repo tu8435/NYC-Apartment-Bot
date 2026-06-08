@@ -55,7 +55,7 @@ To create a separate named profile, use:
 rentrank-nyc init --profile-name summer-2026
 ```
 
-Named profiles are stored at `secrets/config/profiles/<name>.json`.
+Named profiles are stored under `secrets/config/profiles/<name>/` with their own `preferences.json`, `workspace.json`, and `google-oauth-token.json`.
 
 ## Environment Variables
 
@@ -219,6 +219,8 @@ Then run with that profile:
 ```bash
 rentrank-nyc --profile-name summer-2026 --dry-run
 ```
+
+When a named profile is used, RentRank NYC also reads that profile's `workspace.json` and stores OAuth tokens at `secrets/config/profiles/<name>/google-oauth-token.json`.
 
 You can also generate only a preference file at an explicit path:
 

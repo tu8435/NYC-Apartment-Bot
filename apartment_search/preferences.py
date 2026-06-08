@@ -40,12 +40,16 @@ def write_default_profile(path: str | Path) -> None:
 
 
 def profile_path_for_name(name: str) -> Path:
+    return profile_dir_for_name(name) / "preferences.json"
+
+
+def profile_dir_for_name(name: str) -> Path:
     normalized = name.strip()
     if not normalized:
         raise ValueError("Profile name cannot be blank.")
     if any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for character in normalized):
         raise ValueError("Profile names may only contain letters, numbers, dots, underscores, and hyphens.")
-    return PRIVATE_PROFILE_DIR / f"{normalized}.json"
+    return PRIVATE_PROFILE_DIR / normalized
 
 
 def _default_profile_path() -> Path:
