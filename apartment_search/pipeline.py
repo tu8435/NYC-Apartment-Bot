@@ -147,7 +147,7 @@ def build_pipeline(
     else:
         provider = RapidApiRealtyProvider(max_requests=rapidapi_max_requests)
 
-    workspace = load_workspace_config(workspace_path)
+    workspace = load_workspace_config(workspace_path, apply_env_overrides=workspace_path is None)
     folder_link = workspace.google_drive_folder_link or None
     if folder_link_path and Path(folder_link_path).exists():
         folder_link = Path(folder_link_path).read_text(encoding="utf-8").strip()
@@ -158,6 +158,8 @@ def build_pipeline(
         folder_id=workspace.google_drive_folder_id,
         spreadsheet_title=workspace.google_sheets_title,
         oauth_token_path=workspace.google_oauth_token_path,
+        create_spreadsheet_if_missing=workspace.create_spreadsheet_if_missing,
+        apply_target_env_overrides=workspace_path is None,
     )
     scorer = ListingScorer(profile, use_gemini=use_gemini)
     hpd_client = HpdViolationClient(enabled=enable_hpd_lookup)

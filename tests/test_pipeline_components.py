@@ -19,6 +19,7 @@ from apartment_search.request_budget import estimate_requests
 from apartment_search.models import CategoryScores, FilterResult, LaundryStatus, Listing, ListingScore, RankedListing
 from apartment_search.preferences import default_profile
 from apartment_search.scoring import GoogleGeminiScoringClient, ListingScorer, _format_url_error, _ssl_context, heuristic_score_listing
+from apartment_search.sheets import GoogleSheetsConfig, GoogleSheetsWriter
 from apartment_search.sheets import CANDIDATE_HEADERS, REJECTED_HEADERS, TOUR_HEADERS, build_workbook_values, build_workflow_rows
 from apartment_search.sheets import parse_drive_folder_id, parse_spreadsheet_id
 from apartment_search.sheets import _usable_path
@@ -195,6 +196,23 @@ def test_workspace_config_prefers_env_over_file(tmp_path, monkeypatch: pytest.Mo
     assert workspace.google_sheets_title == "File Title"
 
 
+def test_workspace_config_can_ignore_env_for_explicit_profile_workspace(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace_path = tmp_path / "workspace.json"
+    workspace_path.write_text(
+        '{"google_sheets_spreadsheet_id": "", "google_oauth_token_path": "profile-token.json"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GOOGLE_SHEETS_SPREADSHEET_ID", "root-sheet")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "root-token.json")
+
+    workspace = load_workspace_config(workspace_path, apply_env_overrides=False)
+
+    assert workspace.google_sheets_spreadsheet_id == ""
+    assert workspace.google_oauth_token_path == "profile-token.json"
+
+
 def test_workspace_config_loads_profile_oauth_token_path(tmp_path) -> None:
     workspace_path = tmp_path / "workspace.json"
     workspace_path.write_text(
@@ -205,6 +223,43 @@ def test_workspace_config_loads_profile_oauth_token_path(tmp_path) -> None:
     workspace = load_workspace_config(workspace_path)
 
     assert workspace.google_oauth_token_path == "secrets/config/profiles/search/google-oauth-token.json"
+
+
+def test_workspace_config_loads_create_spreadsheet_guard(tmp_path) -> None:
+    workspace_path = tmp_path / "workspace.json"
+    workspace_path.write_text('{"create_spreadsheet_if_missing": true}', encoding="utf-8")
+
+    workspace = load_workspace_config(workspace_path)
+
+    assert workspace.create_spreadsheet_if_missing is True
+
+
+def test_sheets_writer_parses_workspace_sheet_link() -> None:
+    writer = GoogleSheetsWriter.from_env(
+        spreadsheet_id="https://docs.google.com/spreadsheets/d/sheet123abc/edit#gid=0"
+    )
+
+    assert writer.config.spreadsheet_id == "sheet123abc"
+
+
+def test_sheets_writer_can_disable_target_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_SHEETS_SPREADSHEET_ID", "root-sheet")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN", "root-token.json")
+
+    writer = GoogleSheetsWriter.from_env(
+        oauth_token_path="profile-token.json",
+        apply_target_env_overrides=False,
+    )
+
+    assert writer.config.spreadsheet_id in (None, "")
+    assert writer.config.oauth_token_path == "profile-token.json"
+
+
+def test_sheets_writer_requires_explicit_target_for_writes() -> None:
+    writer = GoogleSheetsWriter(GoogleSheetsConfig())
+
+    with pytest.raises(RuntimeError, match="No Google Sheet target"):
+        writer.write([], default_profile(), [], [], dry_run=False)
 
 
 def test_laundry_dealbreaker_rejects_laundromat_only() -> None:

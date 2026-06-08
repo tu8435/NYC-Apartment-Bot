@@ -228,17 +228,22 @@ def _prompt_profile(profile: dict[str, Any], input_fn: InputFn, print_fn: PrintF
 def _prompt_workspace(workspace: dict[str, Any], input_fn: InputFn, print_fn: PrintFn) -> None:
     print_fn("\nGoogle Sheet / Drive")
     workspace["google_sheets_spreadsheet_id"] = _ask(
-        "Existing Google Sheet ID (blank to create one)", workspace["google_sheets_spreadsheet_id"], input_fn
-    )
-    workspace["google_drive_folder_id"] = _ask(
-        "Google Drive folder ID (blank if not using a folder)", workspace["google_drive_folder_id"], input_fn
+        "Existing Google Sheet link or ID (blank if creating a new Sheet in a Drive folder)",
+        workspace["google_sheets_spreadsheet_id"],
+        input_fn,
     )
     workspace["google_drive_folder_link"] = _ask(
-        "Google Drive folder link (optional alternative to folder ID)",
+        "Google Drive folder link (blank if writing to an existing Sheet)",
         workspace["google_drive_folder_link"],
         input_fn,
     )
+    workspace["google_drive_folder_id"] = ""
     workspace["google_sheets_title"] = _ask("Google Sheet title", workspace["google_sheets_title"], input_fn)
+    workspace["create_spreadsheet_if_missing"] = _ask_bool(
+        "Allow creating a new Sheet in My Drive if no Sheet or folder link is configured",
+        bool(workspace.get("create_spreadsheet_if_missing", False)),
+        input_fn,
+    )
 
 
 def _ask(prompt: str, default: Any, input_fn: InputFn) -> str:

@@ -129,6 +129,7 @@ class GoogleSheetsConfig:
     credentials_path: str | None = None
     oauth_client_secret_path: str | None = None
     oauth_token_path: str = "secrets/google-oauth-token.json"
+    create_spreadsheet_if_missing: bool = False
 
 
 class GoogleSheetsWriter:
@@ -143,21 +144,28 @@ class GoogleSheetsWriter:
         folder_id: str | None = None,
         spreadsheet_title: str | None = None,
         oauth_token_path: str | None = None,
+        create_spreadsheet_if_missing: bool = False,
+        apply_target_env_overrides: bool = True,
     ) -> "GoogleSheetsWriter":
+        env_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID") if apply_target_env_overrides else ""
+        env_spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID") if apply_target_env_overrides else ""
+        env_title = os.getenv("GOOGLE_SHEETS_TITLE") if apply_target_env_overrides else ""
+        env_oauth_token = os.getenv("GOOGLE_OAUTH_TOKEN") if apply_target_env_overrides else ""
         resolved_folder_id = (
             parse_drive_folder_id(folder_id or "")
-            or parse_drive_folder_id(os.getenv("GOOGLE_DRIVE_FOLDER_ID") or "")
+            or parse_drive_folder_id(env_folder_id or "")
             or parse_drive_folder_id(folder_link or "")
         )
-        resolved_spreadsheet_id = spreadsheet_id or parse_spreadsheet_id(os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID") or "")
+        resolved_spreadsheet_id = parse_spreadsheet_id(spreadsheet_id or "") or parse_spreadsheet_id(env_spreadsheet_id or "")
         return cls(
             GoogleSheetsConfig(
                 spreadsheet_id=resolved_spreadsheet_id,
                 folder_id=resolved_folder_id,
-                spreadsheet_title=spreadsheet_title or os.getenv("GOOGLE_SHEETS_TITLE", "RentRank NYC Candidates"),
+                spreadsheet_title=spreadsheet_title or env_title or "RentRank NYC Candidates",
                 credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
                 oauth_client_secret_path=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-                oauth_token_path=oauth_token_path or os.getenv("GOOGLE_OAUTH_TOKEN", "secrets/google-oauth-token.json"),
+                oauth_token_path=oauth_token_path or env_oauth_token or "secrets/google-oauth-token.json",
+                create_spreadsheet_if_missing=create_spreadsheet_if_missing,
             )
         )
 
@@ -173,6 +181,12 @@ class GoogleSheetsWriter:
         if dry_run:
             return {"dry_run": True, "workbook": workbook}
 
+        if not self.config.spreadsheet_id and not self.config.folder_id and not self.config.create_spreadsheet_if_missing:
+            raise RuntimeError(
+                "No Google Sheet target is configured. Set `google_sheets_spreadsheet_id` or "
+                "`google_drive_folder_link` in this profile's workspace.json, run with --dry-run, "
+                "or set `create_spreadsheet_if_missing` to true."
+            )
         sheets_service, drive_service = _build_google_services(
             credentials_path=self.config.credentials_path,
             oauth_client_secret_path=self.config.oauth_client_secret_path,

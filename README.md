@@ -244,8 +244,10 @@ When no private profile exists, RentRank NYC falls back to the sanitized example
 - `google_drive_folder_id`: create new Sheets inside a Drive folder.
 - `google_drive_folder_link`: paste a Drive folder URL instead of an ID.
 - `google_sheets_title`: title used when RentRank NYC creates a new Sheet.
+- `google_oauth_token_path`: OAuth token path for this workspace or named profile.
+- `create_spreadsheet_if_missing`: set to `true` only if you want RentRank NYC to create a Sheet in My Drive when no Sheet or folder target is configured.
 
-Environment variables like `GOOGLE_SHEETS_SPREADSHEET_ID` still work and override the workspace file.
+For the root/default workspace, environment variables like `GOOGLE_SHEETS_SPREADSHEET_ID` still work and override the workspace file. For named profiles, `--profile-name` uses that profile's own `workspace.json` and OAuth token path so it does not silently inherit the root workspace target.
 
 ## Tests
 
