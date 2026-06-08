@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -49,8 +50,11 @@ def get_google_credentials(
     if service_account_path:
         return service_account.Credentials.from_service_account_file(service_account_path, scopes=resolved_scopes)
 
-    if os.path.exists(token_path):
-        credentials = Credentials.from_authorized_user_file(token_path, scopes=resolved_scopes)
+    if os.path.exists(token_path) and _token_file_has_required_scopes(token_path, resolved_scopes):
+        try:
+            credentials = Credentials.from_authorized_user_file(token_path, scopes=resolved_scopes)
+        except ValueError:
+            credentials = None
     if credentials and not _has_required_scopes(credentials, resolved_scopes):
         credentials = None
     if credentials and not credentials.valid and credentials.expired and credentials.refresh_token:
@@ -65,7 +69,7 @@ def get_google_credentials(
 
         flow = InstalledAppFlow.from_client_secrets_file(oauth_secret_path, resolved_scopes)
         oauth_port = int(os.getenv("GOOGLE_OAUTH_PORT", "8080"))
-        credentials = flow.run_local_server(port=oauth_port)
+        credentials = flow.run_local_server(port=oauth_port, access_type="offline", prompt="consent")
         if credentials:
             Path(token_path).parent.mkdir(parents=True, exist_ok=True)
             Path(token_path).write_text(credentials.to_json(), encoding="utf-8")
@@ -104,3 +108,18 @@ def _has_required_scopes(credentials: Any, scopes: list[str]) -> bool:
     if hasattr(credentials, "has_scopes"):
         return bool(credentials.has_scopes(scopes))
     return True
+
+
+def _token_file_has_required_scopes(token_path: str, scopes: list[str]) -> bool:
+    try:
+        data = json.loads(Path(token_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    token_scopes = data.get("scopes")
+    if isinstance(token_scopes, str):
+        granted_scopes = set(token_scopes.split())
+    elif isinstance(token_scopes, list):
+        granted_scopes = {str(scope) for scope in token_scopes}
+    else:
+        return False
+    return set(scopes).issubset(granted_scopes)

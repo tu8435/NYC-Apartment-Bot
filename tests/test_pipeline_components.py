@@ -1,6 +1,8 @@
 import json
 import base64
 import ssl
+import sys
+import types
 import urllib.error
 from email import message_from_bytes
 from email import policy
@@ -289,6 +291,121 @@ def test_google_credentials_can_use_existing_token_without_client_secret(
     credentials = get_google_credentials(None, None, str(token_path), scopes=scopes)
 
     assert credentials.token == "access-token"
+
+
+def test_google_credentials_reauths_when_token_is_missing_refresh_token(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token_path = tmp_path / "google-oauth-token.json"
+    secret_path = tmp_path / "client_secret.json"
+    scopes = profile_oauth_scopes()
+    token_path.write_text('{"token": "bad-token"}', encoding="utf-8")
+    secret_path.write_text("{}", encoding="utf-8")
+    flow_kwargs: dict[str, object] = {}
+
+    class FakeCredentials:
+        token = "fresh-token"
+
+        def to_json(self):
+            return json.dumps(
+                {
+                    "token": "fresh-token",
+                    "refresh_token": "fresh-refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "scopes": scopes,
+                }
+            )
+
+    class FakeInstalledAppFlow:
+        @classmethod
+        def from_client_secrets_file(cls, oauth_secret_path, requested_scopes):
+            assert oauth_secret_path == str(secret_path)
+            assert requested_scopes == scopes
+            return cls()
+
+        def run_local_server(self, **kwargs):
+            flow_kwargs.update(kwargs)
+            return FakeCredentials()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "google_auth_oauthlib.flow",
+        types.SimpleNamespace(InstalledAppFlow=FakeInstalledAppFlow),
+    )
+
+    credentials = get_google_credentials(None, str(secret_path), str(token_path), scopes=scopes)
+
+    assert credentials.token == "fresh-token"
+    assert flow_kwargs["access_type"] == "offline"
+    assert flow_kwargs["prompt"] == "consent"
+    assert json.loads(token_path.read_text(encoding="utf-8"))["refresh_token"] == "fresh-refresh-token"
+
+
+def test_google_credentials_reauths_when_token_lacks_requested_scope(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token_path = tmp_path / "google-oauth-token.json"
+    secret_path = tmp_path / "client_secret.json"
+    existing_scopes = profile_oauth_scopes(include_gmail=False)
+    requested_scopes = profile_oauth_scopes(include_gmail=True)
+    token_path.write_text(
+        json.dumps(
+            {
+                "token": "sheets-only-token",
+                "refresh_token": "refresh-token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": existing_scopes,
+                "expiry": "2999-01-01T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    secret_path.write_text("{}", encoding="utf-8")
+    flow_kwargs: dict[str, object] = {}
+
+    class FakeCredentials:
+        token = "gmail-token"
+
+        def to_json(self):
+            return json.dumps(
+                {
+                    "token": "gmail-token",
+                    "refresh_token": "gmail-refresh-token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "scopes": requested_scopes,
+                }
+            )
+
+    class FakeInstalledAppFlow:
+        @classmethod
+        def from_client_secrets_file(cls, oauth_secret_path, scopes):
+            assert oauth_secret_path == str(secret_path)
+            assert scopes == requested_scopes
+            return cls()
+
+        def run_local_server(self, **kwargs):
+            flow_kwargs.update(kwargs)
+            return FakeCredentials()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "google_auth_oauthlib.flow",
+        types.SimpleNamespace(InstalledAppFlow=FakeInstalledAppFlow),
+    )
+
+    credentials = get_google_credentials(None, str(secret_path), str(token_path), scopes=requested_scopes)
+
+    assert credentials.token == "gmail-token"
+    assert flow_kwargs["prompt"] == "consent"
+    assert "https://www.googleapis.com/auth/gmail.send" in json.loads(
+        token_path.read_text(encoding="utf-8")
+    )["scopes"]
 
 
 def test_share_profile_attaches_preferences_and_workspace_without_token_file(
