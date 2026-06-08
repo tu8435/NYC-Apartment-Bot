@@ -9,7 +9,7 @@ from pathlib import Path
 from apartment_search.commute import CommuteEstimator
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.pipeline import build_pipeline
-from apartment_search.preferences import write_default_profile
+from apartment_search.preferences import profile_path_for_name, write_default_profile
 from apartment_search.request_budget import estimate_requests
 from apartment_search.scoring import GoogleGeminiScoringClient
 
@@ -18,6 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the NYC apartment search automation pipeline.")
     parser.add_argument("command", nargs="?", choices=["init"], help="Run an interactive setup command.")
     parser.add_argument("--profile", help="Path to a JSON preference profile file.")
+    parser.add_argument("--profile-name", help="Named profile under secrets/config/profiles/<name>.json.")
     parser.add_argument("--workspace", help="Path to a JSON workspace config file.")
     parser.add_argument("--env-file", default=".env", help="Path to a dotenv-style environment file.")
     parser.add_argument("--seed-listings", help="Path to local listing JSON for dry runs or calibration.")
@@ -34,24 +35,39 @@ def main() -> None:
     parser.add_argument("--maps-requests", action="store_true", help="Include Google Maps requests in the estimate.")
     parser.add_argument("--check-google-apis", action="store_true", help="Run sanitized Gemini and Maps credential checks, then exit.")
     parser.add_argument("--init-profile", help="Write the default preference profile JSON to this path and exit.")
-    parser.add_argument("--profile-output", default="secrets/config/preferences.json", help="Path written by `init` for private preferences.")
+    parser.add_argument("--profile-output", help="Path written by `init` for private preferences.")
     parser.add_argument("--workspace-output", default="secrets/config/workspace.json", help="Path written by `init` for private workspace config.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing files when running `init`.")
     parser.add_argument("--output", help="Optional path for dry-run JSON output.")
     args = parser.parse_args()
     load_env_file(args.env_file)
 
+    if args.profile and args.profile_name:
+        parser.error("Use either --profile or --profile-name, not both.")
+
     if args.command == "init":
+        try:
+            profile_output = args.profile_output or (
+                profile_path_for_name(args.profile_name) if args.profile_name else "secrets/config/preferences.json"
+            )
+        except ValueError as error:
+            parser.error(str(error))
         run_init_wizard(
-            profile_path=args.profile_output,
+            profile_path=profile_output,
             workspace_path=args.workspace_output,
             force=args.force,
         )
         return
 
     if args.init_profile:
-        write_default_profile(args.init_profile)
-        print(f"Wrote default preference profile to {args.init_profile}")
+        try:
+            init_profile_path = args.init_profile or (
+                profile_path_for_name(args.profile_name) if args.profile_name else "secrets/config/preferences.json"
+            )
+        except ValueError as error:
+            parser.error(str(error))
+        write_default_profile(init_profile_path)
+        print(f"Wrote default preference profile to {init_profile_path}")
         return
 
     if args.check_google_apis:
@@ -70,8 +86,13 @@ def main() -> None:
         print(json.dumps(estimate.as_dict(), indent=2))
         return
 
+    try:
+        profile_path = args.profile or (profile_path_for_name(args.profile_name) if args.profile_name else None)
+    except ValueError as error:
+        parser.error(str(error))
+
     pipeline = build_pipeline(
-        profile_path=args.profile,
+        profile_path=profile_path,
         workspace_path=args.workspace,
         folder_link_path=args.folder_link,
         seed_listings_path=args.seed_listings,

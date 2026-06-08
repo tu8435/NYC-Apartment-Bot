@@ -7,7 +7,7 @@ from apartment_search.models import Listing, PreferenceProfile
 
 OUTREACH_TEMPLATE = """Hi {landlord},
 
-I'm {sender_name}. My roommate and I are on the market for apartments with a {move_in} move-in date.
+I'm {sender_name}. {household_intro} on the market for apartments with a {move_in} move-in date.
 
 {applicant_details}
 
@@ -27,6 +27,7 @@ def build_outreach_draft(listing: Listing, profile: PreferenceProfile, sender_na
     return OUTREACH_TEMPLATE.format(
         landlord=landlord,
         sender_name=sender_name or profile.renter_names[0],
+        household_intro=_household_intro(profile),
         move_in=profile.move_in,
         applicant_details=_applicant_details(),
         max_budget=profile.budget.outreach_max_rent,
@@ -47,3 +48,11 @@ def _applicant_details() -> str:
     if details:
         return details.replace("\\n", "\n")
     return "We can provide income, employment, credit, and application documentation upon request."
+
+
+def _household_intro(profile: PreferenceProfile) -> str:
+    if len(profile.renter_names) <= 1:
+        return "I am"
+    if len(profile.renter_names) == 2:
+        return "My roommate and I are"
+    return "My roommates and I are"

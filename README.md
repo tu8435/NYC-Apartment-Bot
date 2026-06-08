@@ -44,10 +44,18 @@ rentrank-nyc init
 
 The wizard writes:
 
-- `secrets/config/preferences.json`: private renter details, move-in date, budget, commute destination, neighborhoods, and scoring preferences.
+- `secrets/config/preferences.json`: private renter details for up to 8 renters, move-in date, budget, commute destination, neighborhoods, and scoring preferences.
 - `secrets/config/workspace.json`: private Google Sheet ID, Drive folder target, and sheet title.
 
 Both files are ignored by git. Public templates live in `config/preferences.example.json` and `config/workspace.example.json`.
+
+To create a separate named profile, use:
+
+```bash
+rentrank-nyc init --profile-name summer-2026
+```
+
+Named profiles are stored at `secrets/config/profiles/<name>.json`.
 
 ## Environment Variables
 
@@ -200,13 +208,25 @@ The easiest private local setup is the wizard:
 rentrank-nyc init
 ```
 
-You can also generate only the preference file:
+To create a named profile for a different search:
+
+```bash
+rentrank-nyc init --profile-name summer-2026
+```
+
+Then run with that profile:
+
+```bash
+rentrank-nyc --profile-name summer-2026 --dry-run
+```
+
+You can also generate only a preference file at an explicit path:
 
 ```bash
 rentrank-nyc --init-profile secrets/config/preferences.json
 ```
 
-Then edit `secrets/config/preferences.json` with your renter names, move-in date, commute destination, budget, neighborhoods, and scoring preferences. To use a different private profile:
+Then edit `secrets/config/preferences.json` with your renter names, move-in date, commute destination, budget, neighborhoods, and scoring preferences. The wizard supports 1 to 8 renters. To use a different private profile:
 
 ```bash
 RENTRANK_PROFILE_PATH=/absolute/path/to/preferences.json rentrank-nyc --dry-run

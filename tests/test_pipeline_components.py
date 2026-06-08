@@ -1,3 +1,4 @@
+import json
 import ssl
 import urllib.error
 
@@ -11,6 +12,7 @@ from apartment_search.hpd import parse_nyc_address
 from apartment_search.init_wizard import run_init_wizard
 from apartment_search.outreach import build_outreach_draft
 from apartment_search.pipeline import ApartmentSearchPipeline
+from apartment_search.preferences import profile_path_for_name
 from apartment_search.providers.base import ListingProvider
 from apartment_search.providers.rapidapi_realty import RapidApiRealtyProvider, RapidApiRequestBudgetExceeded
 from apartment_search.request_budget import estimate_requests
@@ -54,6 +56,16 @@ def test_outreach_uses_private_applicant_details(monkeypatch: pytest.MonkeyPatch
     assert "Private One" in draft
 
 
+def test_outreach_uses_plural_roommate_wording() -> None:
+    profile = default_profile()
+    profile.renter_names = ["Private One", "Private Two", "Private Three"]
+    listing = Listing(source="test", source_id="1", url="https://streeteasy.com/example", address="123 Main Street")
+
+    draft = build_outreach_draft(listing, profile)
+
+    assert "My roommates and I are on the market" in draft
+
+
 def test_application_docs_use_private_credit_notes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APARTMENT_CREDIT_SCORE_NOTES", "Private credit details live here.")
     profile = default_profile()
@@ -82,6 +94,36 @@ def test_init_wizard_writes_private_profile_and_workspace(tmp_path) -> None:
     assert workspace_path.exists()
     assert '"renter_names"' in profile_path.read_text(encoding="utf-8")
     assert '"google_sheets_title"' in workspace_path.read_text(encoding="utf-8")
+
+
+def test_init_wizard_supports_up_to_eight_renters(tmp_path) -> None:
+    profile_path = tmp_path / "preferences.json"
+    workspace_path = tmp_path / "workspace.json"
+    names = [f"Renter {index}" for index in range(1, 9)]
+    emails = [f"renter{index}@example.com" for index in range(1, 9)]
+    responses = iter(["8", *names, *emails, *([""] * 80)])
+
+    run_init_wizard(
+        profile_path=profile_path,
+        workspace_path=workspace_path,
+        force=True,
+        input_fn=lambda _: next(responses),
+        print_fn=lambda _: None,
+    )
+
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert profile["budget"]["people"] == 8
+    assert profile["renter_names"] == names
+    assert profile["renter_emails"] == emails
+
+
+def test_named_profile_paths_live_under_private_profiles_dir() -> None:
+    assert profile_path_for_name("summer-2026").as_posix() == "secrets/config/profiles/summer-2026.json"
+
+
+def test_named_profile_rejects_path_traversal() -> None:
+    with pytest.raises(ValueError):
+        profile_path_for_name("../private")
 
 
 def test_workspace_config_prefers_env_over_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

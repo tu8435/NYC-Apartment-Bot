@@ -11,6 +11,7 @@ from apartment_search.workspace import EXAMPLE_WORKSPACE_PATH
 
 InputFn = Callable[[str], str]
 PrintFn = Callable[[str], None]
+MAX_RENTERS = 8
 
 QUALITATIVE_PRESETS = {
     "balanced": {},
@@ -67,14 +68,21 @@ def run_init_wizard(
 
 def _prompt_profile(profile: dict[str, Any], input_fn: InputFn, print_fn: PrintFn) -> None:
     print_fn("\nProfile")
-    profile["renter_names"] = _ask_list("Renter names", profile["renter_names"], input_fn)
-    profile["renter_emails"] = _ask_list("Renter emails", profile["renter_emails"], input_fn)
+    budget = profile["budget"]
+    renter_count = _ask_int_range(
+        "Number of renters",
+        int(budget.get("people") or len(profile["renter_names"]) or 1),
+        1,
+        MAX_RENTERS,
+        input_fn,
+    )
+    budget["people"] = renter_count
+    profile["renter_names"] = _ask_people("Renter name", renter_count, profile["renter_names"], "Renter", input_fn)
+    profile["renter_emails"] = _ask_people("Renter email", renter_count, profile["renter_emails"], "", input_fn)
     profile["move_in"] = _ask("Move-in date or range", profile["move_in"], input_fn)
     profile["lease_months"] = _ask_int("Lease length in months", profile["lease_months"], input_fn)
 
     print_fn("\nBudget")
-    budget = profile["budget"]
-    budget["people"] = _ask_int("Number of renters", budget["people"], input_fn)
     budget["target_share_min"] = _ask_int("Target minimum share per person", budget["target_share_min"], input_fn)
     budget["target_share_max"] = _ask_int("Target maximum share per person", budget["target_share_max"], input_fn)
     budget["stretch_share_max"] = _ask_int("Stretch maximum share per person", budget["stretch_share_max"], input_fn)
@@ -148,6 +156,15 @@ def _ask_list(prompt: str, default: list[Any], input_fn: InputFn) -> list[str]:
     return [item.strip() for item in response.split(",") if item.strip()]
 
 
+def _ask_people(prompt: str, count: int, defaults: list[Any], fallback_prefix: str, input_fn: InputFn) -> list[str]:
+    values: list[str] = []
+    for index in range(count):
+        fallback = f"{fallback_prefix} {index + 1}".strip()
+        default = str(defaults[index]).strip() if index < len(defaults) else fallback
+        values.append(_ask(f"{prompt} {index + 1}", default, input_fn))
+    return values
+
+
 def _ask_int(prompt: str, default: int, input_fn: InputFn) -> int:
     while True:
         response = _ask(prompt, default, input_fn)
@@ -155,6 +172,14 @@ def _ask_int(prompt: str, default: int, input_fn: InputFn) -> int:
             return int(response)
         except ValueError:
             print("Please enter a whole number.")
+
+
+def _ask_int_range(prompt: str, default: int, minimum: int, maximum: int, input_fn: InputFn) -> int:
+    while True:
+        value = _ask_int(prompt, default, input_fn)
+        if minimum <= value <= maximum:
+            return value
+        print(f"Please enter a number between {minimum} and {maximum}.")
 
 
 def _ask_float(prompt: str, default: float, input_fn: InputFn) -> float:

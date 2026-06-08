@@ -15,6 +15,7 @@ from apartment_search.models import (
 
 
 PRIVATE_PROFILE_PATH = Path("secrets/config/preferences.json")
+PRIVATE_PROFILE_DIR = Path("secrets/config/profiles")
 EXAMPLE_PROFILE_PATH = Path(__file__).resolve().parent.parent / "config" / "preferences.example.json"
 
 
@@ -36,6 +37,15 @@ def write_default_profile(path: str | Path) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(_load_profile_data(EXAMPLE_PROFILE_PATH), indent=2) + "\n", encoding="utf-8")
+
+
+def profile_path_for_name(name: str) -> Path:
+    normalized = name.strip()
+    if not normalized:
+        raise ValueError("Profile name cannot be blank.")
+    if any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for character in normalized):
+        raise ValueError("Profile names may only contain letters, numbers, dots, underscores, and hyphens.")
+    return PRIVATE_PROFILE_DIR / f"{normalized}.json"
 
 
 def _default_profile_path() -> Path:
